@@ -231,7 +231,7 @@ if extract_btn:
             st.write("🗺️ Mapping relationships...")
             try:
                 result = call_gemini(user_input, api_key)
-                result = inject_abns(result)          # ← ABN injection here
+                result = inject_abns(result)
                 st.session_state.result = result
                 st.write("✅ Extraction complete!")
                 status.update(label="✅ Analysis Complete!", state="complete")
@@ -263,26 +263,32 @@ if st.session_state.result:
         "📄 Raw JSON"
     ])
 
+    # -----------------------------------------------------------------------
+    # Tab 1 — Entities  (HTML rendering fix applied here)
+    # -----------------------------------------------------------------------
     with tab1:
         entities = data.get("entities", [])
         st.markdown(f"**{len(entities)} entities found**")
+
         for e in entities:
             badge_color = {
-                "Company":          "#4f46e5",
-                "SMSF":             "#0891b2",
-                "Trust":            "#16a34a",
-                "Individual":       "#9333ea",
-                "Corporate Trustee":"#b45309"
+                "Company":           "#4f46e5",
+                "SMSF":              "#0891b2",
+                "Trust":             "#16a34a",
+                "Individual":        "#9333ea",
+                "Corporate Trustee": "#b45309",
             }.get(e.get("type", ""), "#6b7280")
 
-            contact_html = ""
-            if e.get("contact"):
-                if e["contact"].get("email"):
-                    contact_html += f"📧 {e['contact']['email']}  "
-                if e["contact"].get("phone"):
-                    contact_html += f"📱 {e['contact']['phone']}"
+            # --- Build contact HTML string first ---
+            contact_parts = []
+            contact = e.get("contact") or {}
+            if contact.get("email"):
+                contact_parts.append(f"📧 {contact['email']}")
+            if contact.get("phone"):
+                contact_parts.append(f"📱 {contact['phone']}")
+            contact_html = " &nbsp; ".join(contact_parts)
 
-            # Build second line: ABN + Source only
+            # --- Build meta (ABN + Source) HTML string first ---
             meta_parts = []
             if e.get("abn"):
                 meta_parts.append(f"🔢 ABN: <strong>{e['abn']}</strong>")
@@ -290,36 +296,49 @@ if st.session_state.result:
                 meta_parts.append(f"💾 Source: {e['data_source']}")
             meta_html = " &nbsp;|&nbsp; ".join(meta_parts)
 
+            # --- Pre-compute optional section strings ---
+            meta_section    = f'<br><small style="color:#555">{meta_html}</small>'    if meta_html    else ""
+            contact_section = f'<br><small style="color:#555">{contact_html}</small>' if contact_html else ""
+
             st.markdown(f"""
 <div class="entity-card">
-    <strong style="font-size:16px">{e.get('name','Unknown')}</strong>
-    <span style="background:{badge_color};color:white;border-radius:20px;padding:2px 10px;font-size:12px;margin-left:8px">{e.get('type','')}</span>
-    <br><small style="color:#555">🏷️ {e.get('subtype','')} &nbsp;|&nbsp; 🎯 {e.get('role','')}</small>
-    {'<br><small style="color:#555">' + meta_html + '</small>' if meta_html else ''}
-    {'<br><small style="color:#555">' + contact_html + '</small>' if contact_html else ''}
+    <strong style="font-size:16px">{e.get('name', 'Unknown')}</strong>
+    <span style="background:{badge_color};color:white;border-radius:20px;padding:2px 10px;font-size:12px;margin-left:8px">{e.get('type', '')}</span>
+    <br><small style="color:#555">🏷️ {e.get('subtype', '')} &nbsp;|&nbsp; 🎯 {e.get('role', '')}</small>
+    {meta_section}
+    {contact_section}
 </div>""", unsafe_allow_html=True)
 
+    # -----------------------------------------------------------------------
+    # Tab 2 — Relationships
+    # -----------------------------------------------------------------------
     with tab2:
         relationships = data.get("relationships", [])
         st.markdown(f"**{len(relationships)} relationships found**")
         for r in relationships:
             st.markdown(f"""
 <div class="relationship-card">
-    <strong>{r.get('from','')}</strong>
-    <span style="color:#16a34a;margin:0 8px">→ {r.get('relationship','')} →</span>
-    <strong>{r.get('to','')}</strong>
+    <strong>{r.get('from', '')}</strong>
+    <span style="color:#16a34a;margin:0 8px">→ {r.get('relationship', '')} →</span>
+    <strong>{r.get('to', '')}</strong>
 </div>""", unsafe_allow_html=True)
 
+    # -----------------------------------------------------------------------
+    # Tab 3 — Services
+    # -----------------------------------------------------------------------
     with tab3:
         services = data.get("compliance_services", [])
         st.markdown(f"**{len(services)} compliance services flagged**")
         for s in services:
             st.markdown(f"""
 <div class="service-card">
-    <strong>📌 {s.get('service','')}</strong>
-    <br><small style="color:#555">🏢 {s.get('entity','')} &nbsp;|&nbsp; 🔄 {s.get('frequency','')} &nbsp;|&nbsp; 📅 {s.get('deadline','N/A')}</small>
+    <strong>📌 {s.get('service', '')}</strong>
+    <br><small style="color:#555">🏢 {s.get('entity', '')} &nbsp;|&nbsp; 🔄 {s.get('frequency', '')} &nbsp;|&nbsp; 📅 {s.get('deadline', 'N/A')}</small>
 </div>""", unsafe_allow_html=True)
 
+    # -----------------------------------------------------------------------
+    # Tab 4 — Individuals
+    # -----------------------------------------------------------------------
     with tab4:
         individuals = data.get("individuals", [])
         st.markdown(f"**{len(individuals)} individuals found**")
@@ -331,10 +350,13 @@ if st.session_state.result:
             idv = "✅ IDV Required" if i.get("idv_required") else "❌ IDV Not Required"
             st.markdown(f"""
 <div class="individual-card">
-    <strong>👤 {i.get('name','')}</strong> &nbsp; <small style="color:#9333ea">{idv}</small>
+    <strong>👤 {i.get('name', '')}</strong> &nbsp; <small style="color:#9333ea">{idv}</small>
     <br><div style="margin-top:6px">{roles_html}</div>
 </div>""", unsafe_allow_html=True)
 
+    # -----------------------------------------------------------------------
+    # Tab 5 — Raw JSON
+    # -----------------------------------------------------------------------
     with tab5:
         st.json(data)
         st.download_button(
