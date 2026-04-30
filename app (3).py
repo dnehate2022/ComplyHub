@@ -52,11 +52,11 @@ st.markdown("""
 st.title("🏢 ComplyHub Entity Extractor")
 st.markdown(
     "**Advisory-First Onboarding** — Enter client details in plain English. "
-    "ComplyHub will automatically extract entities, map relationships and flag  services."
+    "ComplyHub will automatically extract entities, map relationships and flag services."
 )
 st.divider()
 
-SYSTEM_PROMPT = """You are a Senior Tax &  Analyst specialising in Australian accounting and financial services.
+SYSTEM_PROMPT = """You are a Senior Tax & Compliance Analyst specialising in Australian accounting and financial services.
 
 Extract structured information from plain-English client descriptions provided by accountants or advisors.
 
@@ -116,6 +116,7 @@ Rules:
 - SMSFs and Trusts -> ABN via ATO
 - Always set idv_required: true for every individual
 """
+
 EXAMPLE_TEXT = (
     "New client — Priya Mehta, runs a wholesale company called Mehta Holdings Pty Ltd, sole director. "
     "Her email is priya@mehta.com.au, mobile 0412 345 678. "
@@ -123,18 +124,56 @@ EXAMPLE_TEXT = (
     "We're doing tax planning and BAS for the company plus the SMSF audit."
 )
 
+# ---------------------------------------------------------------------------
+# Hardcoded ABN lookup — replace with real ABR API calls when ready
+# ---------------------------------------------------------------------------
+HARDCODED_ABN = {
+    "Mehta Holdings Pty Ltd":  "12 345 678 901",
+    "Mehta Family Super Fund": "98 765 432 109",
+    "Mehta SMSF Pty Ltd":      "45 678 901 234",
+}
+
 if "result" not in st.session_state:
     st.session_state.result = None
 if "input_text" not in st.session_state:
     st.session_state.input_text = ""
 
-# ---------------------------------------------------------------------------
-# API key — read directly from secrets.toml, never shown in UI
-# ---------------------------------------------------------------------------
+
 def get_api_key() -> str:
     return st.secrets["GEMINI_API_KEY"]
 
 
+def inject_abns(result: dict) -> dict:
+    """Inject ABNs from HARDCODED_ABN into matched entities."""
+    for entity in result.get("entities", []):
+        name = entity.get("name", "")
+        if name in HARDCODED_ABN:
+            entity["abn"] = HARDCODED_ABN[name]
+    return result
+
+
+def call_gemini(text: str, api_key: str) -> dict:
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=text,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            temperature=0.1,
+            response_mime_type="application/json",
+        ),
+    )
+    raw = response.text.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    return json.loads(raw.strip())
+
+
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
 with st.sidebar:
     st.header("⚙️ Settings")
     st.markdown("**Entity Priority Order:**")
@@ -144,12 +183,15 @@ with st.sidebar:
     st.markdown("4. 💼 SMSFs")
     st.markdown("5. 📦 Unit Trusts")
 
+# ---------------------------------------------------------------------------
+# Input
+# ---------------------------------------------------------------------------
 col1, col2 = st.columns([3, 1])
 with col1:
     st.subheader("📝 Enter Client Details")
 with col2:
     if st.button("📋 Load Example"):
-        st.session_state.input_text = EXAMPLE_TEXT + "ABN =put 12 345 678 in entities"
+        st.session_state.input_text = EXAMPLE_TEXT
         st.session_state.result = None
         st.rerun()
 
@@ -172,39 +214,23 @@ if clear_btn:
     st.session_state.input_text = ""
     st.rerun()
 
-
-def call_gemini(text: str, api_key: str) -> dict:
-    client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=text,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            temperature=0.1,
-            response_mime_type="application/json",
-        ),
-    )
-    raw = response.text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    return json.loads(raw.strip())
-
-
+# ---------------------------------------------------------------------------
+# Extraction
+# ---------------------------------------------------------------------------
 if extract_btn:
     api_key = get_api_key()
     if not api_key:
-        st.error("⚠️ No Gemini API key found. Enter it in the sidebar or configure GEMINI_API_KEY in Streamlit Cloud Secrets.")
+        st.error("⚠️ No Gemini API key found. Add GEMINI_API_KEY to Streamlit Cloud Secrets.")
     elif not user_input.strip():
         st.warning("⚠️ Please enter client details first.")
     else:
-        with st.status("🤖 analysing...", expanded=True) as status:
+        with st.status("🤖 Analysing...", expanded=True) as status:
             st.write("📖 Reading text...")
             st.write("🔍 Identifying entities...")
             st.write("🗺️ Mapping relationships...")
             try:
                 result = call_gemini(user_input, api_key)
+                result = inject_abns(result)          # ← ABN injection here
                 st.session_state.result = result
                 st.write("✅ Extraction complete!")
                 status.update(label="✅ Analysis Complete!", state="complete")
@@ -215,6 +241,9 @@ if extract_btn:
                 status.update(label="❌ Error", state="error")
                 st.error(f"Error: {e}")
 
+# ---------------------------------------------------------------------------
+# Results
+# ---------------------------------------------------------------------------
 if st.session_state.result:
     data = st.session_state.result
     st.divider()
@@ -238,24 +267,31 @@ if st.session_state.result:
         st.markdown(f"**{len(entities)} entities found**")
         for e in entities:
             badge_color = {
-                "Company": "#4f46e5",
-                "SMSF": "#0891b2",
-                "Trust": "#16a34a",
-                "Individual": "#9333ea",
-                "Corporate Trustee": "#b45309"
+                "Company":          "#4f46e5",
+                "SMSF":             "#0891b2",
+                "Trust":            "#16a34a",
+                "Individual":       "#9333ea",
+                "Corporate Trustee":"#b45309"
             }.get(e.get("type", ""), "#6b7280")
+
             contact_html = ""
             if e.get("contact"):
                 if e["contact"].get("email"):
                     contact_html += f"📧 {e['contact']['email']}  "
                 if e["contact"].get("phone"):
                     contact_html += f"📱 {e['contact']['phone']}"
+
+            # Show ABN if injected
+            abn_html = ""
+            if e.get("abn"):
+                abn_html = f"&nbsp;|&nbsp; 🔢 ABN: <strong>{e['abn']}</strong>"
+
             st.markdown(f"""
 <div class="entity-card">
     <strong style="font-size:16px">{e.get('name','Unknown')}</strong>
     <span style="background:{badge_color};color:white;border-radius:20px;padding:2px 10px;font-size:12px;margin-left:8px">{e.get('type','')}</span>
     <br><small style="color:#555">🏷️ {e.get('subtype','')} &nbsp;|&nbsp; 🎯 {e.get('role','')}</small>
-    <br><small style="color:#555">🔎 ABN: {e.get('abn_lookup','')} &nbsp;|&nbsp; 💾 Source: {e.get('data_source','')}</small>
+    <br><small style="color:#555">🔎 ABN Lookup: {e.get('abn_lookup','')} &nbsp;|&nbsp; 💾 Source: {e.get('data_source','')}{abn_html}</small>
     {'<br><small style="color:#555">' + contact_html + '</small>' if contact_html else ''}
 </div>""", unsafe_allow_html=True)
 
@@ -272,7 +308,7 @@ if st.session_state.result:
 
     with tab3:
         services = data.get("compliance_services", [])
-        st.markdown(f"**{len(services)}  services flagged**")
+        st.markdown(f"**{len(services)} compliance services flagged**")
         for s in services:
             st.markdown(f"""
 <div class="service-card">
