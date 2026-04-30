@@ -142,10 +142,6 @@ if "input_text" not in st.session_state:
 # ---------------------------------------------------------------------------
 
 def clean(value) -> str:
-    """
-    Return empty string for any falsy / null-like value.
-    Handles: None, '', 'null', 'None', 'N/A', 'n/a'
-    """
     if value is None:
         return ""
     s = str(value).strip()
@@ -155,21 +151,11 @@ def clean(value) -> str:
 
 
 def safe_text(value) -> str:
-    """
-    Escape characters that Streamlit markdown auto-linkifies:
-      @ -> &#64;   (email detection)
-      . -> &#46;   (domain / URL detection)
-    Apply to ANY field rendered inside st.markdown HTML.
-    """
     s = clean(value)
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("@", "&#64;").replace(".", "&#46;")
 
 
 def safe_plain(value) -> str:
-    """
-    Escape only HTML special chars (no dot/@ escaping needed).
-    Use for plain name/label fields that won't be mis-detected as URLs.
-    """
     s = clean(value)
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
@@ -314,20 +300,6 @@ if st.session_state.result:
                 "Corporate Trustee": "#b45309",
             }.get(entity_type, "#6b7280")
 
-            # --- Contact: email + phone ---
-            contact_parts = []
-            contact = e.get("contact") or {}
-
-            email_val = clean(contact.get("email"))
-            if email_val:
-                contact_parts.append(f"📧 {safe_text(email_val)}")
-
-            phone_val = clean(contact.get("phone"))
-            if phone_val:
-                contact_parts.append(f"📱 {safe_plain(phone_val)}")
-
-            contact_html = " &nbsp; ".join(contact_parts)
-
             # --- Meta: ABN + Source (Source hidden for Individuals) ---
             meta_parts = []
 
@@ -346,8 +318,7 @@ if st.session_state.result:
             role_val    = safe_plain(e.get("role"))    or "—"
 
             # --- Pre-compute optional HTML sections ---
-            meta_section    = f'<br><small style="color:#555">{meta_html}</small>'    if meta_html    else ""
-            contact_section = f'<br><small style="color:#555">{contact_html}</small>' if contact_html else ""
+            meta_section = f'<br><small style="color:#555">{meta_html}</small>' if meta_html else ""
 
             st.markdown(f"""
 <div class="entity-card">
@@ -355,7 +326,6 @@ if st.session_state.result:
     <span style="background:{badge_color};color:white;border-radius:20px;padding:2px 10px;font-size:12px;margin-left:8px">{entity_type}</span>
     <br><small style="color:#555">🏷️ {subtype_val} &nbsp;|&nbsp; 🎯 {role_val}</small>
     {meta_section}
-    {contact_section}
 </div>""", unsafe_allow_html=True)
 
     # -----------------------------------------------------------------------
