@@ -289,11 +289,11 @@ if st.session_state.result:
                 contact_parts.append(f"📱 {contact['phone']}")
             contact_html = " &nbsp; ".join(contact_parts)
 
-            # Build meta (ABN + Source) string
+            # Build meta (ABN + Source) string — skip Source for Individuals
             meta_parts = []
             if e.get("abn"):
                 meta_parts.append(f"🔢 ABN: <strong>{e['abn']}</strong>")
-            if e.get("data_source"):
+            if e.get("data_source") and e.get("type") != "Individual":
                 meta_parts.append(f"💾 Source: {e['data_source']}")
             meta_html = " &nbsp;|&nbsp; ".join(meta_parts)
 
