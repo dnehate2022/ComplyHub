@@ -56,7 +56,7 @@ st.markdown(
 )
 st.divider()
 
-SYSTEM_PROMPT = """You are a Senior Tax & Compliance Analyst specialising in Australian accounting and financial services.
+SYSTEM_PROMPT = """You are a Senior Tax & Advisory Analyst specialising in Australian accounting and financial services.
 
 Extract structured information from plain-English client descriptions provided by accountants or advisors.
 
@@ -86,7 +86,7 @@ Use this exact structure:
       "relationship": "Director | Trustee | Beneficiary | Member | Shareholder"
     }
   ],
-  "compliance_services": [
+  "services": [
     {
       "service": "Tax Return | BAS | SMSF Audit | Tax Planning | ASIC Review",
       "entity": "Which entity this applies to",
@@ -125,9 +125,6 @@ EXAMPLE_TEXT = (
     "We're doing tax planning and BAS for the company plus the SMSF audit."
 )
 
-# ---------------------------------------------------------------------------
-# Hardcoded ABN lookup — replace with real ABR API calls when ready
-# ---------------------------------------------------------------------------
 HARDCODED_ABN = {
     "Mehta Holdings Pty Ltd":  "12 345 678 901",
     "Mehta Family Super Fund": "98 765 432 109",
@@ -145,12 +142,16 @@ def get_api_key() -> str:
 
 
 def inject_abns(result: dict) -> dict:
-    """Inject ABNs from HARDCODED_ABN into matched entities."""
     for entity in result.get("entities", []):
         name = entity.get("name", "")
         if name in HARDCODED_ABN:
             entity["abn"] = HARDCODED_ABN[name]
     return result
+
+
+def safe_email(email: str) -> str:
+    """Replace @ with HTML entity so Streamlit markdown never auto-linkifies emails."""
+    return email.replace("@", "&#64;") if email else ""
 
 
 def call_gemini(text: str, api_key: str) -> dict:
@@ -264,7 +265,7 @@ if st.session_state.result:
     ])
 
     # -----------------------------------------------------------------------
-    # Tab 1 — Entities  (HTML rendering fix applied here)
+    # Tab 1 — Entities
     # -----------------------------------------------------------------------
     with tab1:
         entities = data.get("entities", [])
@@ -279,16 +280,16 @@ if st.session_state.result:
                 "Corporate Trustee": "#b45309",
             }.get(e.get("type", ""), "#6b7280")
 
-            # --- Build contact HTML string first ---
+            # Build contact string — safe_email() stops Streamlit auto-linkifying
             contact_parts = []
             contact = e.get("contact") or {}
             if contact.get("email"):
-                contact_parts.append(f"📧 {contact['email']}")
+                contact_parts.append(f"📧 {safe_email(contact['email'])}")
             if contact.get("phone"):
                 contact_parts.append(f"📱 {contact['phone']}")
             contact_html = " &nbsp; ".join(contact_parts)
 
-            # --- Build meta (ABN + Source) HTML string first ---
+            # Build meta (ABN + Source) string
             meta_parts = []
             if e.get("abn"):
                 meta_parts.append(f"🔢 ABN: <strong>{e['abn']}</strong>")
@@ -296,7 +297,7 @@ if st.session_state.result:
                 meta_parts.append(f"💾 Source: {e['data_source']}")
             meta_html = " &nbsp;|&nbsp; ".join(meta_parts)
 
-            # --- Pre-compute optional section strings ---
+            # Pre-compute optional section strings BEFORE the f-string
             meta_section    = f'<br><small style="color:#555">{meta_html}</small>'    if meta_html    else ""
             contact_section = f'<br><small style="color:#555">{contact_html}</small>' if contact_html else ""
 
@@ -327,8 +328,8 @@ if st.session_state.result:
     # Tab 3 — Services
     # -----------------------------------------------------------------------
     with tab3:
-        services = data.get("compliance_services", [])
-        st.markdown(f"**{len(services)} compliance services flagged**")
+        services = data.get("services", [])
+        st.markdown(f"**{len(services)} services flagged**")
         for s in services:
             st.markdown(f"""
 <div class="service-card">
