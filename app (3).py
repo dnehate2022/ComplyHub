@@ -137,6 +137,43 @@ if "input_text" not in st.session_state:
     st.session_state.input_text = ""
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def clean(value) -> str:
+    """
+    Return empty string for any falsy / null-like value.
+    Handles: None, '', 'null', 'None', 'N/A', 'n/a'
+    """
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if s.lower() in ("null", "none", "n/a", "na", ""):
+        return ""
+    return s
+
+
+def safe_text(value) -> str:
+    """
+    Escape characters that Streamlit markdown auto-linkifies:
+      @ -> &#64;   (email detection)
+      . -> &#46;   (domain / URL detection)
+    Apply to ANY field rendered inside st.markdown HTML.
+    """
+    s = clean(value)
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("@", "&#64;").replace(".", "&#46;")
+
+
+def safe_plain(value) -> str:
+    """
+    Escape only HTML special chars (no dot/@ escaping needed).
+    Use for plain name/label fields that won't be mis-detected as URLs.
+    """
+    s = clean(value)
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def get_api_key() -> str:
     return st.secrets["GEMINI_API_KEY"]
 
@@ -147,11 +184,6 @@ def inject_abns(result: dict) -> dict:
         if name in HARDCODED_ABN:
             entity["abn"] = HARDCODED_ABN[name]
     return result
-
-
-def safe_email(email: str) -> str:
-    """Replace @ with HTML entity so Streamlit markdown never auto-linkifies emails."""
-    return email.replace("@", "&#64;") if email else ""
 
 
 def call_gemini(text: str, api_key: str) -> dict:
@@ -251,9 +283,9 @@ if st.session_state.result:
     st.divider()
     st.subheader("📊 Extraction Results")
 
-    if data.get("summary"):
+    if clean(data.get("summary")):
         st.markdown("### 📋 Summary")
-        st.markdown(f'<div class="summary-box">{data["summary"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="summary-box">{safe_plain(data["summary"])}</div>', unsafe_allow_html=True)
 
     st.markdown("---")
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -268,44 +300,60 @@ if st.session_state.result:
     # Tab 1 — Entities
     # -----------------------------------------------------------------------
     with tab1:
-        entities = data.get("entities", [])
+        entities = data.get("entities") or []
         st.markdown(f"**{len(entities)} entities found**")
 
         for e in entities:
+            entity_type = clean(e.get("type"))
+
             badge_color = {
                 "Company":           "#4f46e5",
                 "SMSF":              "#0891b2",
                 "Trust":             "#16a34a",
                 "Individual":        "#9333ea",
                 "Corporate Trustee": "#b45309",
-            }.get(e.get("type", ""), "#6b7280")
+            }.get(entity_type, "#6b7280")
 
-            # Build contact string — safe_email() stops Streamlit auto-linkifying
+            # --- Contact: email + phone ---
             contact_parts = []
             contact = e.get("contact") or {}
-            if contact.get("email"):
-                contact_parts.append(f"📧 {safe_email(contact['email'])}")
-            if contact.get("phone"):
-                contact_parts.append(f"📱 {contact['phone']}")
+
+            email_val = clean(contact.get("email"))
+            if email_val:
+                contact_parts.append(f"📧 {safe_text(email_val)}")
+
+            phone_val = clean(contact.get("phone"))
+            if phone_val:
+                contact_parts.append(f"📱 {safe_plain(phone_val)}")
+
             contact_html = " &nbsp; ".join(contact_parts)
 
-            # Build meta (ABN + Source) string — skip Source for Individuals
+            # --- Meta: ABN + Source (Source hidden for Individuals) ---
             meta_parts = []
-            if e.get("abn"):
-                meta_parts.append(f"🔢 ABN: <strong>{e['abn']}</strong>")
-            if e.get("data_source") and e.get("type") != "Individual":
-                meta_parts.append(f"💾 Source: {e['data_source']}")
+
+            abn_val = clean(e.get("abn"))
+            if abn_val:
+                meta_parts.append(f"🔢 ABN: <strong>{safe_plain(abn_val)}</strong>")
+
+            source_val = clean(e.get("data_source"))
+            if source_val and entity_type != "Individual":
+                meta_parts.append(f"💾 Source: {safe_plain(source_val)}")
+
             meta_html = " &nbsp;|&nbsp; ".join(meta_parts)
 
-            # Pre-compute optional section strings BEFORE the f-string
+            # --- Subtype / Role line ---
+            subtype_val = safe_plain(e.get("subtype")) or "—"
+            role_val    = safe_plain(e.get("role"))    or "—"
+
+            # --- Pre-compute optional HTML sections ---
             meta_section    = f'<br><small style="color:#555">{meta_html}</small>'    if meta_html    else ""
             contact_section = f'<br><small style="color:#555">{contact_html}</small>' if contact_html else ""
 
             st.markdown(f"""
 <div class="entity-card">
-    <strong style="font-size:16px">{e.get('name', 'Unknown')}</strong>
-    <span style="background:{badge_color};color:white;border-radius:20px;padding:2px 10px;font-size:12px;margin-left:8px">{e.get('type', '')}</span>
-    <br><small style="color:#555">🏷️ {e.get('subtype', '')} &nbsp;|&nbsp; 🎯 {e.get('role', '')}</small>
+    <strong style="font-size:16px">{safe_plain(e.get('name')) or 'Unknown'}</strong>
+    <span style="background:{badge_color};color:white;border-radius:20px;padding:2px 10px;font-size:12px;margin-left:8px">{entity_type}</span>
+    <br><small style="color:#555">🏷️ {subtype_val} &nbsp;|&nbsp; 🎯 {role_val}</small>
     {meta_section}
     {contact_section}
 </div>""", unsafe_allow_html=True)
@@ -314,44 +362,64 @@ if st.session_state.result:
     # Tab 2 — Relationships
     # -----------------------------------------------------------------------
     with tab2:
-        relationships = data.get("relationships", [])
+        relationships = data.get("relationships") or []
         st.markdown(f"**{len(relationships)} relationships found**")
+
+        if not relationships:
+            st.info("No relationships found.")
         for r in relationships:
+            from_val = safe_plain(r.get("from"))   or "—"
+            to_val   = safe_plain(r.get("to"))     or "—"
+            rel_val  = safe_plain(r.get("relationship")) or "—"
             st.markdown(f"""
 <div class="relationship-card">
-    <strong>{r.get('from', '')}</strong>
-    <span style="color:#16a34a;margin:0 8px">→ {r.get('relationship', '')} →</span>
-    <strong>{r.get('to', '')}</strong>
+    <strong>{from_val}</strong>
+    <span style="color:#16a34a;margin:0 8px">→ {rel_val} →</span>
+    <strong>{to_val}</strong>
 </div>""", unsafe_allow_html=True)
 
     # -----------------------------------------------------------------------
     # Tab 3 — Services
     # -----------------------------------------------------------------------
     with tab3:
-        services = data.get("services", [])
+        services = data.get("services") or []
         st.markdown(f"**{len(services)} services flagged**")
+
+        if not services:
+            st.info("No services found.")
         for s in services:
+            service_val   = safe_plain(s.get("service"))   or "—"
+            entity_val    = safe_plain(s.get("entity"))    or "—"
+            frequency_val = safe_plain(s.get("frequency")) or "—"
+            deadline_raw  = clean(s.get("deadline"))
+            deadline_val  = safe_plain(deadline_raw) if deadline_raw else "—"
             st.markdown(f"""
 <div class="service-card">
-    <strong>📌 {s.get('service', '')}</strong>
-    <br><small style="color:#555">🏢 {s.get('entity', '')} &nbsp;|&nbsp; 🔄 {s.get('frequency', '')} &nbsp;|&nbsp; 📅 {s.get('deadline', 'N/A')}</small>
+    <strong>📌 {service_val}</strong>
+    <br><small style="color:#555">🏢 {entity_val} &nbsp;|&nbsp; 🔄 {frequency_val} &nbsp;|&nbsp; 📅 {deadline_val}</small>
 </div>""", unsafe_allow_html=True)
 
     # -----------------------------------------------------------------------
     # Tab 4 — Individuals
     # -----------------------------------------------------------------------
     with tab4:
-        individuals = data.get("individuals", [])
+        individuals = data.get("individuals") or []
         st.markdown(f"**{len(individuals)} individuals found**")
+
+        if not individuals:
+            st.info("No individuals found.")
         for i in individuals:
+            name_val = safe_plain(i.get("name")) or "Unknown"
+            roles    = [r for r in (i.get("roles") or []) if clean(r)]
             roles_html = " ".join([
-                f'<span style="background:#9333ea;color:white;border-radius:20px;padding:2px 8px;font-size:11px;margin-right:4px">{r}</span>'
-                for r in i.get("roles", [])
-            ])
+                f'<span style="background:#9333ea;color:white;border-radius:20px;padding:2px 8px;font-size:11px;margin-right:4px">{safe_plain(r)}</span>'
+                for r in roles
+            ]) if roles else '<span style="color:#888;font-size:12px">No roles listed</span>'
+
             idv = "✅ IDV Required" if i.get("idv_required") else "❌ IDV Not Required"
             st.markdown(f"""
 <div class="individual-card">
-    <strong>👤 {i.get('name', '')}</strong> &nbsp; <small style="color:#9333ea">{idv}</small>
+    <strong>👤 {name_val}</strong> &nbsp; <small style="color:#9333ea">{idv}</small>
     <br><div style="margin-top:6px">{roles_html}</div>
 </div>""", unsafe_allow_html=True)
 
