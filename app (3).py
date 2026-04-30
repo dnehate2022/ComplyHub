@@ -118,9 +118,9 @@ Rules:
 """
 
 EXAMPLE_TEXT = (
-    "New client — Priya Mehta, runs a wholesale company called Mehta Holdings Pty Ltd, sole director. "
+    "New client — Priya Mehta, runs a wholesale company called Mehta Holdings Pty Ltd (ABN: 12 345 678 901), sole director. "
     "Her email is priya@mehta.com.au, mobile 0412 345 678. "
-    "She also has an SMSF — Mehta Family Super Fund — with a corporate trustee called Mehta SMSF Pty Ltd. "
+    "She also has an SMSF — Mehta Family Super Fund (ABN: 98 765 432 109) — with a corporate trustee called Mehta SMSF Pty Ltd (ABN: 45 678 901 234). "
     "We're doing tax planning and BAS for the company plus the SMSF audit."
 )
 
