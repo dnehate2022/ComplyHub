@@ -200,7 +200,7 @@ if extract_btn:
     elif not user_input.strip():
         st.warning("⚠️ Please enter client details first.")
     else:
-        with st.status("🤖 Gemini is analysing...", expanded=True) as status:
+        with st.status("🤖 analysing...", expanded=True) as status:
             st.write("📖 Reading text...")
             st.write("🔍 Identifying entities...")
             st.write("🗺️ Mapping relationships...")
