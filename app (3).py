@@ -115,6 +115,7 @@ Rules:
 - Companies -> ABN via ASIC
 - SMSFs and Trusts -> ABN via ATO
 - Always set idv_required: true for every individual
+- IMPORTANT: Every named individual (director, trustee, member, beneficiary) MUST appear in the "entities" array with type "Individual", subtype "Individual", and their role listed. Do NOT skip individuals from the entities list.
 """
 
 EXAMPLE_TEXT = (
@@ -281,17 +282,20 @@ if st.session_state.result:
                 if e["contact"].get("phone"):
                     contact_html += f"📱 {e['contact']['phone']}"
 
-            # Show ABN if injected
-            abn_html = ""
+            # Build second line: ABN + Source only
+            meta_parts = []
             if e.get("abn"):
-                abn_html = f"&nbsp;|&nbsp; 🔢 ABN: <strong>{e['abn']}</strong>"
+                meta_parts.append(f"🔢 ABN: <strong>{e['abn']}</strong>")
+            if e.get("data_source"):
+                meta_parts.append(f"💾 Source: {e['data_source']}")
+            meta_html = " &nbsp;|&nbsp; ".join(meta_parts)
 
             st.markdown(f"""
 <div class="entity-card">
     <strong style="font-size:16px">{e.get('name','Unknown')}</strong>
     <span style="background:{badge_color};color:white;border-radius:20px;padding:2px 10px;font-size:12px;margin-left:8px">{e.get('type','')}</span>
     <br><small style="color:#555">🏷️ {e.get('subtype','')} &nbsp;|&nbsp; 🎯 {e.get('role','')}</small>
-    <br><small style="color:#555">🔎 ABN Lookup: {e.get('abn_lookup','')} &nbsp;|&nbsp; 💾 Source: {e.get('data_source','')}{abn_html}</small>
+    {'<br><small style="color:#555">' + meta_html + '</small>' if meta_html else ''}
     {'<br><small style="color:#555">' + contact_html + '</small>' if contact_html else ''}
 </div>""", unsafe_allow_html=True)
 
