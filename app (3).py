@@ -52,11 +52,11 @@ st.markdown("""
 st.title("🏢 ComplyHub Entity Extractor")
 st.markdown(
     "**Advisory-First Onboarding** — Enter client details in plain English. "
-    "ComplyHub will automatically extract entities, map relationships and flag compliance services."
+    "ComplyHub will automatically extract entities, map relationships and flag  services."
 )
 st.divider()
 
-SYSTEM_PROMPT = """You are a Senior Tax & Compliance Analyst specialising in Australian accounting and financial services.
+SYSTEM_PROMPT = """You are a Senior Tax &  Analyst specialising in Australian accounting and financial services.
 
 Extract structured information from plain-English client descriptions provided by accountants or advisors.
 
@@ -229,7 +229,7 @@ if st.session_state.result:
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "🏢 Entities",
         "🔗 Relationships",
-        "✅ Compliance Services",
+        "✅ Services",
         "👤 Individuals",
         "📄 Raw JSON"
     ])
@@ -273,7 +273,7 @@ if st.session_state.result:
 
     with tab3:
         services = data.get("compliance_services", [])
-        st.markdown(f"**{len(services)} compliance services flagged**")
+        st.markdown(f"**{len(services)}  services flagged**")
         for s in services:
             st.markdown(f"""
 <div class="service-card">
