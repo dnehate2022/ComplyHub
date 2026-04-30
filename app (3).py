@@ -52,11 +52,11 @@ st.markdown("""
 st.title("🏢 ComplyHub Entity Extractor")
 st.markdown(
     "**Advisory-First Onboarding** — Enter client details in plain English. "
-    "ComplyHub will automatically extract entities, map relationships and flag services."
+    "ComplyHub will automatically extract entities, map relationships and flag  services."
 )
 st.divider()
 
-SYSTEM_PROMPT = """You are a Senior Tax & Compliance Analyst specialising in Australian accounting and financial services.
+SYSTEM_PROMPT = """You are a Senior Tax &  Analyst specialising in Australian accounting and financial services.
 
 Extract structured information from plain-English client descriptions provided by accountants or advisors.
 
@@ -71,7 +71,6 @@ Use this exact structure:
       "type": "Company | SMSF | Trust | Individual | Corporate Trustee",
       "subtype": "Pty Ltd | Family Trust | Unit Trust | SMSF | Individual",
       "role": "e.g. Operating Company, Corporate Trustee, Fund Member",
-      "abn": "extracted ABN number as string exactly as mentioned e.g. 12 345 678 901, or null if not mentioned",
       "contact": {
         "email": "if mentioned else null",
         "phone": "if mentioned else null"
@@ -116,14 +115,11 @@ Rules:
 - Companies -> ABN via ASIC
 - SMSFs and Trusts -> ABN via ATO
 - Always set idv_required: true for every individual
-- Always include Individuals as entities with type 'Individual', even if they are also listed in the individuals array
-- Always extract the ABN number exactly as written in the text and put it in the "abn" field
 """
-
 EXAMPLE_TEXT = (
-    "New client — Priya Mehta, runs a wholesale company called Mehta Holdings Pty Ltd (ABN: 12 345 678 901), sole director. "
+    "New client — Priya Mehta, runs a wholesale company called Mehta Holdings Pty Ltd, sole director. "
     "Her email is priya@mehta.com.au, mobile 0412 345 678. "
-    "She also has an SMSF — Mehta Family Super Fund (ABN: 98 765 432 109) — with a corporate trustee called Mehta SMSF Pty Ltd (ABN: 45 678 901 234). "
+    "She also has an SMSF — Mehta Family Super Fund — with a corporate trustee called Mehta SMSF Pty Ltd. "
     "We're doing tax planning and BAS for the company plus the SMSF audit."
 )
 
@@ -153,7 +149,7 @@ with col1:
     st.subheader("📝 Enter Client Details")
 with col2:
     if st.button("📋 Load Example"):
-        st.session_state.input_text = EXAMPLE_TEXT
+        st.session_state.input_text = EXAMPLE_TEXT + "ABN =put 12 345 678 in entities"
         st.session_state.result = None
         st.rerun()
 
@@ -203,7 +199,7 @@ if extract_btn:
     elif not user_input.strip():
         st.warning("⚠️ Please enter client details first.")
     else:
-        with st.status("🤖 Analysing...", expanded=True) as status:
+        with st.status("🤖 analysing...", expanded=True) as status:
             st.write("📖 Reading text...")
             st.write("🔍 Identifying entities...")
             st.write("🗺️ Mapping relationships...")
@@ -248,23 +244,18 @@ if st.session_state.result:
                 "Individual": "#9333ea",
                 "Corporate Trustee": "#b45309"
             }.get(e.get("type", ""), "#6b7280")
-
             contact_html = ""
             if e.get("contact"):
                 if e["contact"].get("email"):
                     contact_html += f"📧 {e['contact']['email']}  "
                 if e["contact"].get("phone"):
                     contact_html += f"📱 {e['contact']['phone']}"
-
-            # ABN number — show actual number if available
-            abn_number = e.get("abn") or "N/A"
-
             st.markdown(f"""
 <div class="entity-card">
     <strong style="font-size:16px">{e.get('name','Unknown')}</strong>
     <span style="background:{badge_color};color:white;border-radius:20px;padding:2px 10px;font-size:12px;margin-left:8px">{e.get('type','')}</span>
     <br><small style="color:#555">🏷️ {e.get('subtype','')} &nbsp;|&nbsp; 🎯 {e.get('role','')}</small>
-    <br><small style="color:#555">🔢 ABN: <strong>{abn_number}</strong> &nbsp;|&nbsp; 🔎 Lookup: {e.get('abn_lookup','')} &nbsp;|&nbsp; 💾 Source: {e.get('data_source','')}</small>
+    <br><small style="color:#555">🔎 ABN: {e.get('abn_lookup','')} &nbsp;|&nbsp; 💾 Source: {e.get('data_source','')}</small>
     {'<br><small style="color:#555">' + contact_html + '</small>' if contact_html else ''}
 </div>""", unsafe_allow_html=True)
 
@@ -281,7 +272,7 @@ if st.session_state.result:
 
     with tab3:
         services = data.get("compliance_services", [])
-        st.markdown(f"**{len(services)} services flagged**")
+        st.markdown(f"**{len(services)}  services flagged**")
         for s in services:
             st.markdown(f"""
 <div class="service-card">
